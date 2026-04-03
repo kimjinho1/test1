@@ -105,9 +105,12 @@ class BackgroundTaskManager:
         logger.info("portfolio_poller started (interval=%ss)", interval)
         while self._running:
             try:
-                portfolio = await asyncio.to_thread(self._broker.get_portfolio)
-                await self._ws_hub.broadcast_portfolio(portfolio)
-                logger.debug("Portfolio broadcast: %d positions", len(portfolio.get("positions", [])))
+                if not getattr(self._broker, "is_connected", False):
+                    logger.debug("portfolio_poller: broker not connected, skipping")
+                else:
+                    portfolio = await asyncio.to_thread(self._broker.get_portfolio)
+                    await self._ws_hub.broadcast_portfolio(portfolio)
+                    logger.debug("Portfolio broadcast: %d positions", len(portfolio) if isinstance(portfolio, list) else 0)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -121,7 +124,9 @@ class BackgroundTaskManager:
         logger.info("strategy_runner started (interval=%ss)", interval)
         while self._running:
             try:
-                if is_market_open():
+                if not getattr(self._broker, "is_connected", False):
+                    logger.debug("strategy_runner: broker not connected, skipping")
+                elif is_market_open():
                     signals = await asyncio.to_thread(
                         self._strategy_engine.run_all,
                         self._broker,
